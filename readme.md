@@ -2,7 +2,17 @@
 
 * 需要安装谷歌浏览器
 
+> 如何运行
 
+* 安装go的运行环境
+* 在命令行输入: 
+
+```
+cd gochromedp
+go run main.go
+```
+
+ 
 
 
 > 需要在config.xlsx文件里输入账号密码
