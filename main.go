@@ -115,7 +115,7 @@ func WriteResult(logContent string) {
 	defer func() { _ = f.Close() }()
 
 	t := time.Now()
-	if _, err = f.WriteString(t.Format(time.ANSIC) + "\n" + logContent + "\n"); err != nil {
+	if _, err = f.WriteString(t.Format(time.ANSIC) + logContent + "\n"); err != nil {
 		panic(err)
 	}
 }

@@ -1,6 +1,6 @@
 module github.com/chromedp/examples
 
-go 1.18
+go 1.17
 
 require (
 	github.com/chromedp/chromedp v0.8.3
