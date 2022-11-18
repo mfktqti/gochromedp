@@ -5,11 +5,12 @@
 > 如何运行
 
 * 安装go的运行环境
-* 在命令行输入: 
+* window环境下，可直接双击main.exe
+* 也可以命令行启动，输入: 
 
 ```
 cd gochromedp
-go run main.go
+main.exe
 ```
 
  
