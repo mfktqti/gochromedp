@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,7 +56,10 @@ func main() {
 		username := cells[0]
 		pass := cells[1]
 
-		url = "http://" + url
+		if !strings.HasPrefix(url, "http") {
+			url = "http://" + url
+		}
+
 		fmt.Printf("url: %v\n", url)
 		fmt.Printf("username: %v\n", username)
 		fmt.Printf("pass: %v\n", pass)
@@ -88,7 +92,7 @@ func runChromedp(username, password, url string) {
 		chromedp.Flag("headless", false),
 		chromedp.ProxyServer(url),
 		//chromedp.ProxyServer("http://218.59.139.238:80"),
-	//	chromedp.ProxyServer("http://127.0.0.1:41091"),
+		//chromedp.ProxyServer("http://127.0.0.1:41091"),
 	)
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()
@@ -178,7 +182,7 @@ func readIpList(path string) ([]string, error) {
 }
 
 func readAccount(path string) ([][]string, error) {
-	f, err := excelize.OpenFile("config.xlsx")
+	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return [][]string{}, err
 	}
