@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/http/httptest"
 	"net/http/httputil"
 	neturl "net/url"
 	"os"
@@ -18,25 +17,7 @@ import (
 )
 
 func main() {
-	// 禁用chrome headless
 
-	// f, err := excelize.OpenFile("config.xlsx")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-	// defer func() {
-	// 	// Close the spreadsheet.
-	// 	if err := f.Close(); err != nil {
-	// 		fmt.Println(err)
-	// 	}
-	// }()
-
-	// rows, err := f.GetRows("Sheet1")
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
 	rows, err := readAccount("config.xlsx")
 	if err != nil {
 		log.Fatalf("读取账号密码出错:%v", err)
@@ -58,6 +39,9 @@ func main() {
 		pass := cells[1]
 
 		url = "http://" + url
+		fmt.Printf("url: %v\n", url)
+		fmt.Printf("username: %v\n", username)
+		fmt.Printf("pass: %v\n", pass)
 		runChromedp(username, pass, url)
 	}
 }
@@ -77,12 +61,14 @@ func runChromedp(username, password, url string) {
 	// defer cancel()
 
 	// create a simple proxy that requires authentication
-	p := httptest.NewServer(newProxy(url))
-	defer p.Close()
-
+	// p := httptest.NewServer(newProxy(url))
+	// defer p.Close()
+	//fmt.Printf("p.URL: %v\n", p.URL)
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
-		chromedp.ProxyServer(p.URL),
+		chromedp.ProxyServer(url),
+		//chromedp.ProxyServer("http://136.228.243.159:8082"),
+	//	chromedp.ProxyServer("http://127.0.0.1:41091"),
 	)
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()
@@ -96,6 +82,7 @@ func runChromedp(username, password, url string) {
 
 	tasks := []chromedp.Action{
 		chromedp.Navigate(`https://all.accor.com/usa/index.en.shtml`),
+		chromedp.Sleep(2 * time.Second),
 		chromedp.DoubleClick(`#onetrust-close-btn-container > button`, chromedp.NodeVisible),
 		chromedp.Sleep(2 * time.Second), chromedp.WaitVisible(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`),
 		chromedp.Click(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`, chromedp.NodeVisible),
@@ -118,7 +105,10 @@ func runChromedp(username, password, url string) {
 		chromedp.Click(`#logout-button`, chromedp.NodeVisible),
 		chromedp.Sleep(3 * time.Second),
 	}
-
+	// tasks = []chromedp.Action{
+	// 	chromedp.Navigate(`https://www.baidu.com`),
+	// 	chromedp.Sleep(2 * time.Second),
+	// }
 	err := chromedp.Run(ctx, tasks...)
 	if err != nil {
 		fmt.Printf("err: %v\n", err)
@@ -187,10 +177,6 @@ func newProxy(url string) *httputil.ReverseProxy {
 		return neturl.Parse(fmt.Sprintf("http://%s", url))
 	}
 
-	// proxy := func(_ *http.Request) (*neturl.URL, error) {
-	// 	return neturl.Parse("http://12.23.16.11:1234")
-	// }
-
 	return &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			if dump, err := httputil.DumpRequest(r, true); err == nil {
@@ -201,14 +187,15 @@ func newProxy(url string) *httputil.ReverseProxy {
 			// 	r.Header.Set("X-Failed", "407")
 			// }
 		},
-		Transport: &http.Transport{
+		//Transport: &transport{http.DefaultTransport},
+		Transport: &transport{&http.Transport{
 			Proxy: proxy,
 			// ForceAttemptHTTP2:     true,
 			// MaxIdleConns:          100,
 			// IdleConnTimeout:       90 * time.Second,
 			// TLSHandshakeTimeout:   10 * time.Second,
 			// ExpectContinueTimeout: 1 * time.Second,
-		},
+		}},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			if err.Error() == "407" {
 				log.Println("proxy: not authorized")
@@ -219,4 +206,15 @@ func newProxy(url string) *httputil.ReverseProxy {
 			}
 		},
 	}
+}
+
+type transport struct {
+	http.RoundTripper
+}
+
+func (t *transport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if h := r.Header.Get("X-Failed"); h != "" {
+		return nil, fmt.Errorf(h)
+	}
+	return t.RoundTripper.RoundTrip(r)
 }
