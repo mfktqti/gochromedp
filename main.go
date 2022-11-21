@@ -22,7 +22,7 @@ type Para struct {
 	Url      string
 }
 
-var WriteResultChan = make(chan string, 5)
+var WriteResultChan = make(chan string, 1)
 var waitGroup sync.WaitGroup
 
 func main() {
@@ -38,7 +38,7 @@ func main() {
 
 	go WriteResult()
 
-	p, _ := ants.NewPoolWithFunc(2, func(p interface{}) {
+	p, _ := ants.NewPoolWithFunc(5, func(p interface{}) {
 		p2 := p.(Para)
 		runChromedp(p2.Username, p2.Password, p2.Url)
 		waitGroup.Done()
@@ -60,9 +60,6 @@ func main() {
 			url = "http://" + url
 		}
 
-		fmt.Printf("url: %v\n", url)
-		fmt.Printf("username: %v\n", username)
-		fmt.Printf("pass: %v\n", pass)
 		waitGroup.Add(1)
 		_ = p.Invoke(Para{
 			Username: username,
@@ -137,7 +134,6 @@ func runChromedp(username, password, url string) {
 		content := fmt.Sprintf("\nusername:%s,status:%s,points:%s", username, status, points)
 		fmt.Printf("content: %v\n", content)
 		WriteResultChan <- content
-		//WriteResult(content)
 	}
 }
 
