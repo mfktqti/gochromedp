@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	neturl "net/url"
 	"os"
 	"time"
 
@@ -14,33 +20,49 @@ import (
 func main() {
 	// 禁用chrome headless
 
-	f, err := excelize.OpenFile("config.xlsx")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer func() {
-		// Close the spreadsheet.
-		if err := f.Close(); err != nil {
-			fmt.Println(err)
-		}
-	}()
+	// f, err := excelize.OpenFile("config.xlsx")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+	// defer func() {
+	// 	// Close the spreadsheet.
+	// 	if err := f.Close(); err != nil {
+	// 		fmt.Println(err)
+	// 	}
+	// }()
 
-	rows, err := f.GetRows("Sheet1")
+	// rows, err := f.GetRows("Sheet1")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
+	rows, err := readAccount("config.xlsx")
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatalf("读取账号密码出错:%v", err)
+	}
+	ipList, err := readIpList("iplist.txt")
+	if err != nil {
+		log.Fatalf("读取Ip列表出错:%v", err)
 	}
 
 	for i := 0; i < len(rows); i++ {
+		url := ""
+		if i > (len(ipList) - 1) {
+			url = ipList[i%len(ipList)]
+		} else {
+			url = ipList[i]
+		}
 		cells := rows[i]
 		username := cells[0]
 		pass := cells[1]
-		runChromedp(username, pass)
+
+		url = "http://" + url
+		runChromedp(username, pass, url)
 	}
 }
 
-func runChromedp(username, password string) {
+func runChromedp(username, password, url string) {
 	var status, points string
 
 	// // create chrome instance
@@ -54,8 +76,13 @@ func runChromedp(username, password string) {
 	// ctx, cancel = context.WithTimeout(ctx, 150*time.Second)
 	// defer cancel()
 
+	// create a simple proxy that requires authentication
+	p := httptest.NewServer(newProxy(url))
+	defer p.Close()
+
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
+		chromedp.ProxyServer(p.URL),
 	)
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()
@@ -117,5 +144,79 @@ func WriteResult(logContent string) {
 	t := time.Now()
 	if _, err = f.WriteString(t.Format(time.ANSIC) + logContent + "\n"); err != nil {
 		panic(err)
+	}
+}
+
+func readIpList(path string) ([]string, error) {
+	var results []string
+	fileHandler, err := os.OpenFile(path, os.O_RDONLY, 0666)
+	if err != nil {
+		return results, err
+	}
+	defer fileHandler.Close()
+	reader := bufio.NewReader(fileHandler)
+
+	for {
+		line, _, err := reader.ReadLine()
+		if err == io.EOF {
+			break
+		}
+		results = append(results, string(line))
+	}
+	return results, nil
+}
+
+func readAccount(path string) ([][]string, error) {
+	f, err := excelize.OpenFile("config.xlsx")
+	if err != nil {
+		return [][]string{}, err
+	}
+	defer func() {
+		// Close the spreadsheet.
+		if err := f.Close(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+
+	return f.GetRows("Sheet1")
+}
+
+// newProxy creates a proxy that requires authentication.
+func newProxy(url string) *httputil.ReverseProxy {
+	proxy := func(_ *http.Request) (*neturl.URL, error) {
+		return neturl.Parse(fmt.Sprintf("http://%s", url))
+	}
+
+	// proxy := func(_ *http.Request) (*neturl.URL, error) {
+	// 	return neturl.Parse("http://12.23.16.11:1234")
+	// }
+
+	return &httputil.ReverseProxy{
+		Director: func(r *http.Request) {
+			if dump, err := httputil.DumpRequest(r, true); err == nil {
+				log.Printf("%s", dump)
+			}
+			// // hardcode username/password "u:p" (base64 encoded: dTpw ) to make it simple
+			// if auth := r.Header.Get("Proxy-Authorization"); auth != "Basic dTpw" {
+			// 	r.Header.Set("X-Failed", "407")
+			// }
+		},
+		Transport: &http.Transport{
+			Proxy: proxy,
+			// ForceAttemptHTTP2:     true,
+			// MaxIdleConns:          100,
+			// IdleConnTimeout:       90 * time.Second,
+			// TLSHandshakeTimeout:   10 * time.Second,
+			// ExpectContinueTimeout: 1 * time.Second,
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			if err.Error() == "407" {
+				log.Println("proxy: not authorized")
+				w.Header().Add("Proxy-Authenticate", `Basic realm="Proxy Authorization"`)
+				w.WriteHeader(407)
+			} else {
+				w.WriteHeader(http.StatusBadGateway)
+			}
+		},
 	}
 }
