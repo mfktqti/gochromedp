@@ -38,7 +38,7 @@ func main() {
 
 	go WriteResult()
 
-	p, _ := ants.NewPoolWithFunc(2, func(p interface{}) {
+	p, _ := ants.NewPoolWithFunc(5, func(p interface{}) {
 		p2 := p.(Para)
 		runChromedp(p2.Username, p2.Password, p2.Url)
 		waitGroup.Done()
