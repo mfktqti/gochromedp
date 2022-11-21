@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/chromedp/chromedp v0.8.3
+	github.com/panjf2000/ants/v2 v2.6.0
 	github.com/xuri/excelize/v2 v2.6.1
 )
 
