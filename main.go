@@ -38,7 +38,7 @@ func main() {
 
 	go WriteResult()
 
-	p, _ := ants.NewPoolWithFunc(5, func(p interface{}) {
+	p, _ := ants.NewPoolWithFunc(2, func(p interface{}) {
 		p2 := p.(Para)
 		runChromedp(p2.Username, p2.Password, p2.Url)
 		waitGroup.Done()
@@ -47,16 +47,16 @@ func main() {
 
 	for i := 0; i < len(rows); i++ {
 		url := ""
-		if i > (len(ipList) - 1) {
+		if len(ipList) > 0 && i > (len(ipList)-1) {
 			url = ipList[i%len(ipList)]
-		} else {
+		} else if len(ipList) > 0 {
 			url = ipList[i]
 		}
 		cells := rows[i]
 		username := cells[0]
 		pass := cells[1]
 
-		if !strings.HasPrefix(url, "http") {
+		if len(url) > 0 && !strings.HasPrefix(url, "http") {
 			url = "http://" + url
 		}
 
@@ -85,12 +85,15 @@ func runChromedp(username, password, url string) {
 	// defer cancel()
 
 	//fmt.Printf("p.URL: %v\n", p.URL)
+
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
-		chromedp.ProxyServer(url),
 		//chromedp.ProxyServer("http://218.59.139.238:80"),
 		//chromedp.ProxyServer("http://127.0.0.1:41091"),
 	)
+	if len(url) > 0 {
+		opts = append(opts, chromedp.ProxyServer(url))
+	}
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()
 
