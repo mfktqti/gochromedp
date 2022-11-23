@@ -28,23 +28,24 @@ var WriteResultChan = make(chan string, 1)
 var waitGroup sync.WaitGroup
 
 func main() {
-	// username := "pld22552019@163"
-	// password := "22552019"
-	// connAdsl("宽带连接", username, password)
-	// // //cutAdsl("宽带连接")
 
 	defer ants.Release()
 	rows, err := readAccount("config.xlsx")
 	if err != nil {
 		log.Fatalf("读取账号密码出错:%v", err)
 	}
-	ipList, err := readIpList("iplist.txt")
+	ipList, err := readConfig("iplist.txt")
 	if err != nil {
 		log.Fatalf("读取Ip列表出错:%v", err)
 	}
-	adslInfo, err := readIpList("adsl_config.txt")
+	adslInfo, err := readConfig("adsl_config.txt")
 	if err != nil {
 		log.Fatalf("读取Adsl信息出错:%v", err)
+	}
+
+	if len(adslInfo) == 2 {
+		connAdsl("宽带连接", adslInfo[0], adslInfo[1])
+		cutAdsl("宽带连接")
 	}
 
 	go WriteResult()
@@ -55,10 +56,9 @@ func main() {
 		waitGroup.Done()
 	})
 	defer p.Release()
-
+	WriteResultChan <- "开始执行任务..."
 	for i := 0; i < len(rows); i++ {
-		//RasSetEntryPropertiesW("本地连接")
-
+		waitGroup.Add(1)
 		url := ""
 		if len(ipList) > 0 && i > (len(ipList)-1) {
 			url = ipList[i%len(ipList)]
@@ -73,7 +73,6 @@ func main() {
 			url = "http://" + url
 		}
 
-		waitGroup.Add(1)
 		para := Para{
 			Username: username,
 			Password: pass,
@@ -84,14 +83,15 @@ func main() {
 			para.adslPassword = adslInfo[1]
 		}
 		_ = p.Invoke(para)
-
 	}
 	waitGroup.Wait()
-	time.Sleep(5 * time.Second)
+	WriteResultChan <- "执行任务完成..."
+	close(WriteResultChan)
+	time.Sleep(2 * time.Second)
 }
 
 func runChromedp(username, password, adslUsername, adslPassword, url string) {
-	if adslUsername == "" || adslPassword == "" {
+	if adslUsername != "" && adslPassword != "" {
 		connAdsl("宽带连接", adslUsername, adslPassword)
 		defer cutAdsl("宽带连接")
 	}
@@ -160,7 +160,7 @@ func runChromedp(username, password, adslUsername, adslPassword, url string) {
 		fmt.Printf("err: %v\n", err)
 	} else {
 		content := fmt.Sprintf("\nusername:%s,status:%s,points:%s", username, status, points)
-		fmt.Printf("content: %v\n", content)
+		fmt.Printf("%v\n", content)
 		WriteResultChan <- content
 	}
 
@@ -187,7 +187,7 @@ func WriteResult() {
 	}
 }
 
-func readIpList(path string) ([]string, error) {
+func readConfig(path string) ([]string, error) {
 	var results []string
 	fileHandler, err := os.OpenFile(path, os.O_RDONLY, 0666)
 	if err != nil {

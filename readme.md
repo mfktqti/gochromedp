@@ -1,6 +1,11 @@
+> ./start.bat 执行go run 
+
+> ./deploy.bat 生成32位的可执行文件 
+
 > 运行环境
 
 * 需要安装谷歌浏览器
+* 只能在windows下运行，因为使用了adsl拨号来切换IP
 
 > 如何运行
 
@@ -10,7 +15,7 @@
 
 ```
 cd gochromedp
-main.exe
+go run main.go adsl.go
 ```
 
  
@@ -26,12 +31,17 @@ main.exe
 * 127.0.0.1:8888
 * http://127.0.0.1:8888
 
+> adsl账号配置adsl_config.txt，格式：
+* 第一行为adsl账号
+* 第二行为adsl密码
 
-> 运行结果：
- 
+> 运行结果输出： 
 * 在运行目录下会输出 Result_yyyyMMdd.txt文件
 
-> 多线程工作
+
+> **目前使用adsl拨号，使用单线程工作**
+
+> ~~多线程工作~~
 * 5个工作线程，循环工作
 * chan输出结果
  
