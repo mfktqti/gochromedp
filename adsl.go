@@ -23,9 +23,9 @@ func connAdsl(adslTitle string, adslName string, adslPass string) {
 	err := executeCmd(adslCmd)
 	if err == nil {
 		fmt.Println("用户名: " + adslName + "  密码: " + adslPass)
-		cutAdsl("宽带连接")
+		//cutAdsl("宽带连接")
 	} else {
-		fmt.Println("什么垃圾玩意")
+		fmt.Println("什么垃圾玩意", err)
 	}
 
 }

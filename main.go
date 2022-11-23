@@ -7,74 +7,94 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/panjf2000/ants"
 	"github.com/xuri/excelize/v2"
 )
 
 type Para struct {
-	Username string
-	Password string
-	Url      string
+	Username     string
+	Password     string
+	Url          string
+	AdslUsername string
+	adslPassword string
 }
 
 var WriteResultChan = make(chan string, 1)
 var waitGroup sync.WaitGroup
 
 func main() {
-	username := "10108888004"
-	password := "123456"
-	connAdsl("宽带连接", username, password)
-	cutAdsl("宽带连接")
+	// username := "pld22552019@163"
+	// password := "22552019"
+	// connAdsl("宽带连接", username, password)
+	// // //cutAdsl("宽带连接")
 
-	// defer ants.Release()
-	// rows, err := readAccount("config.xlsx")
-	// if err != nil {
-	// 	log.Fatalf("读取账号密码出错:%v", err)
-	// }
-	// ipList, err := readIpList("iplist.txt")
-	// if err != nil {
-	// 	log.Fatalf("读取Ip列表出错:%v", err)
-	// }
+	defer ants.Release()
+	rows, err := readAccount("config.xlsx")
+	if err != nil {
+		log.Fatalf("读取账号密码出错:%v", err)
+	}
+	ipList, err := readIpList("iplist.txt")
+	if err != nil {
+		log.Fatalf("读取Ip列表出错:%v", err)
+	}
+	adslInfo, err := readIpList("adsl_config.txt")
+	if err != nil {
+		log.Fatalf("读取Adsl信息出错:%v", err)
+	}
 
-	// go WriteResult()
+	go WriteResult()
 
-	// p, _ := ants.NewPoolWithFunc(1, func(p interface{}) {
-	// 	p2 := p.(Para)
-	// 	runChromedp(p2.Username, p2.Password, p2.Url)
-	// 	waitGroup.Done()
-	// })
-	// defer p.Release()
+	p, _ := ants.NewPoolWithFunc(1, func(p interface{}) {
+		p2 := p.(Para)
+		runChromedp(p2.Username, p2.Password, p2.AdslUsername, p2.adslPassword, p2.Url)
+		waitGroup.Done()
+	})
+	defer p.Release()
 
-	// for i := 0; i < len(rows); i++ {
-	// 	RasSetEntryPropertiesW("本地连接")
-	// 	url := ""
-	// 	if len(ipList) > 0 && i > (len(ipList)-1) {
-	// 		url = ipList[i%len(ipList)]
-	// 	} else if len(ipList) > 0 {
-	// 		url = ipList[i]
-	// 	}
-	// 	cells := rows[i]
-	// 	username := cells[0]
-	// 	pass := cells[1]
+	for i := 0; i < len(rows); i++ {
+		//RasSetEntryPropertiesW("本地连接")
 
-	// 	if len(url) > 0 && !strings.HasPrefix(url, "http") {
-	// 		url = "http://" + url
-	// 	}
+		url := ""
+		if len(ipList) > 0 && i > (len(ipList)-1) {
+			url = ipList[i%len(ipList)]
+		} else if len(ipList) > 0 {
+			url = ipList[i]
+		}
+		cells := rows[i]
+		username := cells[0]
+		pass := cells[1]
 
-	// 	waitGroup.Add(1)
-	// 	_ = p.Invoke(Para{
-	// 		Username: username,
-	// 		Password: pass,
-	// 		Url:      url,
-	// 	})
-	// }
-	// waitGroup.Wait()
+		if len(url) > 0 && !strings.HasPrefix(url, "http") {
+			url = "http://" + url
+		}
+
+		waitGroup.Add(1)
+		para := Para{
+			Username: username,
+			Password: pass,
+			Url:      url,
+		}
+		if len(adslInfo) == 2 {
+			para.AdslUsername = adslInfo[0]
+			para.adslPassword = adslInfo[1]
+		}
+		_ = p.Invoke(para)
+
+	}
+	waitGroup.Wait()
+	time.Sleep(5 * time.Second)
 }
 
-func runChromedp(username, password, url string) {
+func runChromedp(username, password, adslUsername, adslPassword, url string) {
+	if adslUsername == "" || adslPassword == "" {
+		connAdsl("宽带连接", adslUsername, adslPassword)
+		defer cutAdsl("宽带连接")
+	}
 	var status, points string
 
 	// // create chrome instance
@@ -127,6 +147,7 @@ func runChromedp(username, password, url string) {
 		chromedp.Sleep(5 * time.Second),
 		chromedp.Click(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`, chromedp.NodeVisible),
 		chromedp.Sleep(1 * time.Second),
+		chromedp.WaitVisible(`#list-items > div:nth-child(3) > div > div > a > div.item__wrapper.item__wrapper--text__wrapper`, chromedp.NodeVisible),
 		chromedp.InnerHTML(`#list-items > div:nth-child(3) > div > div > a > div.item__wrapper.item__wrapper--text__wrapper > span.value`, &status),
 		chromedp.InnerHTML(`#list-items > div:nth-child(4) > div > div > a > div.item__wrapper.item__wrapper--text__wrapper > span.value`, &points),
 		chromedp.Sleep(time.Second),
@@ -142,6 +163,7 @@ func runChromedp(username, password, url string) {
 		fmt.Printf("content: %v\n", content)
 		WriteResultChan <- content
 	}
+
 }
 
 func WriteResult() {
@@ -159,7 +181,7 @@ func WriteResult() {
 	for v := range WriteResultChan {
 		logContent := v
 		t := time.Now()
-		if _, err = f.WriteString(t.Format(time.ANSIC) + logContent + "\n"); err != nil {
+		if _, err = f.WriteString(t.Format(time.ANSIC) + "\r\n" + logContent + "\r\n"); err != nil {
 			panic(err)
 		}
 	}
