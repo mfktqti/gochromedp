@@ -7,12 +7,10 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
-	"github.com/panjf2000/ants/v2"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -26,48 +24,54 @@ var WriteResultChan = make(chan string, 1)
 var waitGroup sync.WaitGroup
 
 func main() {
-	defer ants.Release()
-	rows, err := readAccount("config.xlsx")
-	if err != nil {
-		log.Fatalf("读取账号密码出错:%v", err)
-	}
-	ipList, err := readIpList("iplist.txt")
-	if err != nil {
-		log.Fatalf("读取Ip列表出错:%v", err)
-	}
+	username := "10108888004"
+	password := "123456"
+	connAdsl("宽带连接", username, password)
+	cutAdsl("宽带连接")
 
-	go WriteResult()
+	// defer ants.Release()
+	// rows, err := readAccount("config.xlsx")
+	// if err != nil {
+	// 	log.Fatalf("读取账号密码出错:%v", err)
+	// }
+	// ipList, err := readIpList("iplist.txt")
+	// if err != nil {
+	// 	log.Fatalf("读取Ip列表出错:%v", err)
+	// }
 
-	p, _ := ants.NewPoolWithFunc(5, func(p interface{}) {
-		p2 := p.(Para)
-		runChromedp(p2.Username, p2.Password, p2.Url)
-		waitGroup.Done()
-	})
-	defer p.Release()
+	// go WriteResult()
 
-	for i := 0; i < len(rows); i++ {
-		url := ""
-		if len(ipList) > 0 && i > (len(ipList)-1) {
-			url = ipList[i%len(ipList)]
-		} else if len(ipList) > 0 {
-			url = ipList[i]
-		}
-		cells := rows[i]
-		username := cells[0]
-		pass := cells[1]
+	// p, _ := ants.NewPoolWithFunc(1, func(p interface{}) {
+	// 	p2 := p.(Para)
+	// 	runChromedp(p2.Username, p2.Password, p2.Url)
+	// 	waitGroup.Done()
+	// })
+	// defer p.Release()
 
-		if len(url) > 0 && !strings.HasPrefix(url, "http") {
-			url = "http://" + url
-		}
+	// for i := 0; i < len(rows); i++ {
+	// 	RasSetEntryPropertiesW("本地连接")
+	// 	url := ""
+	// 	if len(ipList) > 0 && i > (len(ipList)-1) {
+	// 		url = ipList[i%len(ipList)]
+	// 	} else if len(ipList) > 0 {
+	// 		url = ipList[i]
+	// 	}
+	// 	cells := rows[i]
+	// 	username := cells[0]
+	// 	pass := cells[1]
 
-		waitGroup.Add(1)
-		_ = p.Invoke(Para{
-			Username: username,
-			Password: pass,
-			Url:      url,
-		})
-	}
-	waitGroup.Wait()
+	// 	if len(url) > 0 && !strings.HasPrefix(url, "http") {
+	// 		url = "http://" + url
+	// 	}
+
+	// 	waitGroup.Add(1)
+	// 	_ = p.Invoke(Para{
+	// 		Username: username,
+	// 		Password: pass,
+	// 		Url:      url,
+	// 	})
+	// }
+	// waitGroup.Wait()
 }
 
 func runChromedp(username, password, url string) {
