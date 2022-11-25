@@ -1,4 +1,6 @@
-> ./start.bat 执行go run 
+> ./gorun.bat 执行go run 
+
+> ./start.bat 执行main.exe 2  ,2代表执行两次任务切换一个IP
 
 > ./deploy.bat 生成32位的可执行文件 
 

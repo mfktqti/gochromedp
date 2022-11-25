@@ -1,1 +1,2 @@
-go run main.go adsl.go
+main.exe 2
+PAUSE
