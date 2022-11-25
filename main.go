@@ -9,11 +9,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
-	"github.com/panjf2000/ants"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -28,7 +26,6 @@ type Para struct {
 }
 
 var WriteResultChan = make(chan string, 1)
-var waitGroup sync.WaitGroup
 
 func main() {
 	var tempIndex = 1
@@ -39,7 +36,7 @@ func main() {
 		}
 		tempIndex = i
 	}
-	defer ants.Release()
+
 	rows, err := readAccount("config.xlsx")
 	if err != nil {
 		log.Fatalf("读取账号密码出错:%v", err)
@@ -52,23 +49,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("读取Adsl信息出错:%v", err)
 	}
-
 	if len(adslInfo) == 2 {
 		connAdsl("宽带连接", adslInfo[0], adslInfo[1])
 		cutAdsl("宽带连接")
 	}
-
 	go WriteResult()
 
-	p, _ := ants.NewPoolWithFunc(1, func(p interface{}) {
-		p2 := p.(Para)
-		runChromedp(p2)
-		waitGroup.Done()
-	})
-	defer p.Release()
 	WriteResultChan <- "开始执行任务..."
 	for i := 0; i < len(rows); i++ {
-		waitGroup.Add(1)
 		url := ""
 		if len(ipList) > 0 && i > (len(ipList)-1) {
 			url = ipList[i%len(ipList)]
@@ -94,9 +82,9 @@ func main() {
 			para.AdslUsername = adslInfo[0]
 			para.AdslPassword = adslInfo[1]
 		}
-		_ = p.Invoke(para)
+		runChromedp(para)
 	}
-	waitGroup.Wait()
+
 	WriteResultChan <- "执行任务完成..."
 	close(WriteResultChan)
 	time.Sleep(2 * time.Second)
@@ -110,25 +98,14 @@ func runChromedp(p Para) {
 	if p.AdslUsername != "" && p.AdslPassword != "" && (p.CurrentIndex+1)%p.Index == 0 {
 		defer cutAdsl("宽带连接")
 	}
+
 	var status, points string
-
-	// // create chrome instance
-	// ctx, cancel := chromedp.NewContext(
-	// 	context.Background(),
-	// 	// chromedp.WithDebugf(log.Printf),
-	// )
-	// defer cancel()
-
-	// // create a timeout
-	// ctx, cancel = context.WithTimeout(ctx, 150*time.Second)
-	// defer cancel()
-
-	//fmt.Printf("p.URL: %v\n", p.URL)
-
+	log.Printf("打开浏览器: \n")
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
-		//chromedp.ProxyServer("http://218.59.139.238:80"),
-		//chromedp.ProxyServer("http://127.0.0.1:41091"),
+		chromedp.DisableGPU,
+		chromedp.NoDefaultBrowserCheck,
+		chromedp.Flag("ignore-certificate-errors", true),
 	)
 	if len(p.Url) > 0 {
 		opts = append(opts, chromedp.ProxyServer(p.Url))
@@ -143,70 +120,90 @@ func runChromedp(p Para) {
 		chromedp.WithLogf(log.Printf),
 	)
 	defer cancel()
-	// create a timeout
-	ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel = context.WithTimeout(ctx, 150*time.Second)
 	defer cancel()
-	loginTasks := []chromedp.Action{
+	log.Printf("打开浏览器完成: \n")
+	ariaExpandedStr := ""
+	isOk := false
+
+	err := chromedp.Run(ctx,
 		chromedp.Navigate(`https://all.accor.com/usa/index.en.shtml`),
-		chromedp.Sleep(2 * time.Second),
 		chromedp.DoubleClick(`#onetrust-close-btn-container > button`, chromedp.NodeVisible),
-		chromedp.Sleep(2 * time.Second),
-		chromedp.WaitVisible(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`),
-		chromedp.Click(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`, chromedp.NodeVisible),
-		chromedp.Sleep(2 * time.Second),
-		chromedp.Click(`#list-items > div:nth-child(5) > div > a`, chromedp.NodeVisible),
-		chromedp.Sleep(5 * time.Second),
+	)
+	if err != nil {
+		log.Printf("打开首页: %v\n", err)
+		return
+	}
+	log.Printf("打开首页: \n")
+	for {
+		err = chromedp.Run(ctx,
+			chromedp.WaitVisible(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`),
+			chromedp.Click(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`, chromedp.NodeVisible),
+			chromedp.AttributeValue(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div.button-logo > button`, "aria-expanded", &ariaExpandedStr, &isOk),
+		)
+		if err != nil {
+			log.Printf("login菜单 : %v\n", err)
+			return
+		}
+		if isOk && ariaExpandedStr == "true" {
+			break
+		}
+		chromedp.Run(ctx, chromedp.Sleep(time.Second))
+	}
+	log.Printf("打开登录页: \n")
+	//点击登录菜单
+	err = chromedp.Run(ctx, chromedp.Click(`#list-items > div:nth-child(5) > div > a`, chromedp.NodeVisible))
+	if err != nil {
+		log.Printf("点击登录菜单: %v\n", err)
+		return
+	}
+	//点击登录
+	err = chromedp.Run(ctx,
 		chromedp.WaitVisible(`#primary_button`),
 		chromedp.SetValue("#username-id", p.Username),
 		chromedp.SetValue("#password-id", p.Password),
-		chromedp.Sleep(3 * time.Second),
 		chromedp.Click(`#primary_button`, chromedp.NodeVisible),
-		chromedp.Sleep(5 * time.Second),
-	}
-
-	homeTasks := []chromedp.Action{
-		chromedp.WaitVisible(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`),
-		chromedp.Sleep(5 * time.Second),
-		chromedp.Click(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`, chromedp.NodeVisible),
-		chromedp.Sleep(1 * time.Second),
-	}
-	logoutTasks := []chromedp.Action{
-		chromedp.Sleep(time.Second),
-		chromedp.Click(`#logout-button`, chromedp.NodeVisible),
-		chromedp.Sleep(3 * time.Second),
-	}
-
-	err := chromedp.Run(ctx, loginTasks...)
+		chromedp.WaitNotPresent(`#primary_button`),
+	)
 	if err != nil {
-		fmt.Printf("网络超时: %v\n", err)
+		log.Printf("点击登录: %v\n", err)
 		return
 	}
-	var loginErrorMessage = ""
+	var title = ""
+	//点击登录
+	err = chromedp.Run(ctx,
+		chromedp.Title(&title),
+	)
+	if err != nil {
+		log.Printf("获取title: %v\n", err)
+		return
+	}
+	if title == "Log in" {
+		log.Println("密码错误：" + p.Username)
+		return
+	}
+	log.Printf("跳转到首页: \n")
 	for {
-		if err = chromedp.Run(ctx, chromedp.Evaluate(`
-	var element = document.querySelector("#primary_button")
-	element.innerText`, &loginErrorMessage)); err == nil {
-			if err = chromedp.Run(ctx, chromedp.Evaluate(`
-			var element = document.querySelector("#api-service-error")
-			element.innerText`, &loginErrorMessage)); err == nil {
-				log.Println("密码错误：" + p.Username)
-				return
-			}
-			chromedp.Run(ctx, chromedp.Sleep(time.Second))
-		} else {
+		err = chromedp.Run(ctx,
+			chromedp.WaitVisible(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`),
+			chromedp.Click(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div`, chromedp.NodeVisible),
+			chromedp.AttributeValue(`#link-navigation-primaryHeader > div > div.link-navigation__connectZone > div > div > div > div.button-logo > button`, "aria-expanded", &ariaExpandedStr, &isOk))
+		if err != nil {
+			log.Printf("HOME菜单 : %v\n", err)
+			return
+		}
+		if isOk && ariaExpandedStr == "true" {
 			break
 		}
+		chromedp.Run(ctx, chromedp.Sleep(time.Second))
 	}
-
-	if err := chromedp.Run(ctx, homeTasks...); err != nil {
-		fmt.Printf("登录后首页: %v\n", err)
-	}
-
+	log.Printf("加载首页完成: \n")
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`
 	var element = document.querySelector("#list-items > div:nth-child(3) > div > div > a > div.item__wrapper.item__wrapper--text__wrapper > span.value")
 	element.innerText`, &status)); err != nil {
 		//fmt.Printf("status err: %v\n", err)
 		log.Println("没有status的值：" + p.Username)
+		return
 	}
 
 	if err := chromedp.Run(ctx, chromedp.Evaluate(`
@@ -216,10 +213,11 @@ func runChromedp(p Para) {
 		log.Println("没有points的值：" + p.Username)
 	}
 
-	chromedp.Run(ctx, logoutTasks...)
+	chromedp.Run(ctx, chromedp.Click(`#logout-button`, chromedp.NodeVisible))
+
 	if status != "" && points != "" {
-		content := fmt.Sprintf("\nusername:%s,status:%s,points:%s", p.Username, status, points)
-		fmt.Printf("%v\n", content)
+		content := fmt.Sprintf("username:%s,status:%s,points:%s", p.Username, status, points)
+		log.Printf("%v\n", content)
 		WriteResultChan <- content
 	}
 }

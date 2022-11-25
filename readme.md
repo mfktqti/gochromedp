@@ -47,3 +47,5 @@ go run main.go adsl.go
 * 5个工作线程，循环工作
 * chan输出结果
  
+> windows测试：双击start.bat文件即可，
+ 默认执行两次任务切换一次IP，可自行修改start.bat文件中的数字，代表执行几次任务切换一个IP
